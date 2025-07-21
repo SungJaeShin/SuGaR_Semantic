@@ -380,7 +380,15 @@ class SuGaR(nn.Module):
             torch.zeros(n_points, sh_levels**2 - 1, 3).to(device),
             requires_grad=True and (not freeze_gaussians)
         ).to(device)
-            
+        
+        # Initialize semantic features
+        sh_fused_objects = RGB2SH(torch.rand(n_points, self.nerfmodel.gaussians.num_objects, device=device))
+        sh_fused_objects = sh_fused_objects[:, :, None]  # (N, D, 1)
+        self._sh_coordinates_obj = nn.Parameter(
+            sh_fused_objects.transpose(1, 2).contiguous(),  # (N, 1, D)
+            requires_grad=True and (not freeze_gaussians)
+        ).to(device)
+
         # Beta mode
         self.beta_mode = beta_mode
         if beta_mode == 'learnable':
@@ -824,6 +832,7 @@ class SuGaR(nn.Module):
         self._quaternions = torch.nn.Parameter(self._quaternions[prune_mask].detach(), requires_grad=False)
         self._sh_coordinates_dc = torch.nn.Parameter(self._sh_coordinates_dc[prune_mask].detach(), requires_grad=False)
         self._sh_coordinates_rest = torch.nn.Parameter(self._sh_coordinates_rest[prune_mask].detach(), requires_grad=False)
+        self._sh_coordinates_obj = torch.nn.Parameter(self._sh_coordinates_obj[prune_mask].detach(), requires_grad=False)
         self.all_densities = torch.nn.Parameter(self.all_densities[prune_mask].detach(), requires_grad=False)
         
     def drop_low_opacity_points(self, opacity_threshold=0.5):
