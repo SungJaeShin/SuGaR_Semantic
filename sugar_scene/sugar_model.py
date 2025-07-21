@@ -2323,10 +2323,7 @@ class SuGaR(nn.Module):
                 print("quaternions", quaternions.shape)
                 print("scales", scales.shape)
             print("screenspace_points", screenspace_points.shape)
-    
-        # import pdb
-        # pdb.set_trace()
-        
+
         # Add obj
         sh_obj = torch.zeros((self.nerfmodel.gaussians.get_xyz.shape[0], 1, self.nerfmodel.gaussians.num_objects), device='cuda', requires_grad=False)
         if add_label is True: 
@@ -2343,9 +2340,9 @@ class SuGaR(nn.Module):
             rotations = quaternions,
             cov3D_precomp = cov3D
         )
-        
+
         if not(return_2d_radii or return_opacities or return_colors):
-            return rendered_image.transpose(0, 1).transpose(1, 2)
+            return rendered_image, rendered_objects
         
         else:
             outputs = {
@@ -2848,12 +2845,19 @@ def convert_refined_sugar_into_gaussians(
         else:
             features_extra = sh_coordinates_rest.cpu().numpy()
 
+        # Semantic related
+        if sh_coordinates_rest is None:
+            features_obj = refined_sugar._sh_coordinates_obj.cpu().numpy()
+        else:
+            features_obj = sh_coordinates_obj.cpu().numpy()
+
     new_gaussians._xyz = torch.nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda").requires_grad_(True))
     new_gaussians._features_dc = torch.nn.Parameter(torch.tensor(features_dc, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
     new_gaussians._features_rest = torch.nn.Parameter(torch.tensor(features_extra, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
     new_gaussians._opacity = torch.nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(True))
     new_gaussians._scaling = torch.nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True))
     new_gaussians._rotation = torch.nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
+    new_gaussians._features_obj = torch.nn.Parameter(torch.tensor(features_obj, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
 
     new_gaussians.active_sh_degree = new_gaussians.max_sh_degree
     

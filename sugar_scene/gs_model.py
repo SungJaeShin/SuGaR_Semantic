@@ -292,6 +292,21 @@ class GaussianSplattingWrapper:
             gt_image = gt_image.cuda()
         return gt_image.permute(1, 2, 0)
     
+    def get_gt_sem_obj(self, camera_indices:int, to_cuda=False):
+        """Returns the ground truth image corresponding to the training camera at the given index.
+
+        Args:
+            camera_indices (int): Index of the camera in the set of cameras.
+            to_cuda (bool, optional): If True, moves the image to GPU. Defaults to False.
+
+        Returns:
+            Tensor: The ground truth image.
+        """
+        gt_obj = self.cam_list[camera_indices].objects
+        if to_cuda:
+            gt_obj = gt_obj.cuda()
+        return gt_obj
+
     def get_test_gt_image(self, camera_indices:int, to_cuda=False):
         """Returns the ground truth image corresponding to the test camera at the given index.
         

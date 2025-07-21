@@ -142,7 +142,7 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
             image_name=name, uid=id,
             image_height=image_height, image_width=image_width,
             objects=torch.from_numpy(np.array(objects))) # Semantic Mask Related
-        
+        print(f" {id}-th gs_camera.objects.shape: {gs_camera.objects.shape}")
         cam_list.append(gs_camera)
 
     return cam_list
@@ -418,9 +418,6 @@ def convert_camera_from_pytorch3d_to_gs(
         FovX = fovx
         
         name = 'image_' + str(cam_idx)
-        
-        import pdb
-        pdb.set_trace()
 
         camera = GSCamera(
             colmap_id=cam_idx, image=None, gt_alpha_mask=None,

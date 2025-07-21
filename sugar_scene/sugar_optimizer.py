@@ -89,7 +89,8 @@ class SuGaROptimizer():
         if not model.freeze_gaussians:
             l = l + [
                 {'params': [model._sh_coordinates_dc], 'lr': opt.feature_lr, "name": "sh_coordinates_dc"},
-                {'params': [model._sh_coordinates_rest], 'lr': opt.feature_lr / 20.0, "name": "sh_coordinates_rest"}
+                {'params': [model._sh_coordinates_rest], 'lr': opt.feature_lr / 20.0, "name": "sh_coordinates_rest"},
+                {'params': [model._sh_coordinates_obj], 'lr': opt.feature_lr, "name": "sh_coordinates_obj"}
                 ]
             
         if model.learn_opacities:

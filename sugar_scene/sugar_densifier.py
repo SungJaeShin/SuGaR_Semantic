@@ -43,7 +43,7 @@ class SuGaRDensifier():
         self.params_to_densify = []        
         if not self.model.freeze_gaussians:
             self.params_to_densify.extend(["points", "all_densities", "scales", "quaternions"])
-            self.params_to_densify.extend(["sh_coordinates_dc", "sh_coordinates_rest"])
+            self.params_to_densify.extend(["sh_coordinates_dc", "sh_coordinates_rest", "sh_coordinates_obj"])
         
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
@@ -81,7 +81,9 @@ class SuGaRDensifier():
             self.model._sh_coordinates_dc = optimizable_tensors["sh_coordinates_dc"]
         if "sh_coordinates_rest" in self.params_to_densify:
             self.model._sh_coordinates_rest = optimizable_tensors["sh_coordinates_rest"]
-            
+        if "sh_coordinates_obj" in self.params_to_densify:
+            self.model._sh_coordinates_obj = optimizable_tensors["sh_coordinates_obj"]
+
         self.points_gradient_accum = self.points_gradient_accum[valid_points_mask]
         self.denom = self.denom[valid_points_mask]
         self.max_radii2D = self.max_radii2D[valid_points_mask]
@@ -130,6 +132,7 @@ class SuGaRDensifier():
     def densification_postfix(self, new_points, 
                               new_densities, new_scales, new_quaternions,
                               new_sh_coordinates_dc=None, new_sh_coordinates_rest=None, 
+                              new_sh_coordinates_obj=None,
                               ):
         tensors_dict = {
             "points": new_points,
@@ -139,6 +142,7 @@ class SuGaRDensifier():
             }
         tensors_dict["sh_coordinates_dc"] = new_sh_coordinates_dc
         tensors_dict["sh_coordinates_rest"] = new_sh_coordinates_rest
+        tensors_dict["new_sh_coordinates_obj"] = new_sh_coordinates_obj # Add semantic
 
         optimizable_tensors = self.cat_tensors_to_optimizer(tensors_dict)
         
@@ -148,6 +152,7 @@ class SuGaRDensifier():
         self.model._quaternions = optimizable_tensors["quaternions"]
         self.model._sh_coordinates_dc = optimizable_tensors["sh_coordinates_dc"]
         self.model._sh_coordinates_rest = optimizable_tensors["sh_coordinates_rest"]
+        self.model._sh_coordinates_obj = optimizable_tensors["sh_coordinates_obj"]
 
         self.points_gradient_accum = torch.zeros((self.model.points.shape[0], 1), device=self.model.device)
         self.denom = torch.zeros((self.model.points.shape[0], 1), device=self.model.device)
@@ -178,7 +183,8 @@ class SuGaRDensifier():
         new_quaternions = self.model._quaternions[selected_pts_mask]
         new_sh_coordinates_dc = self.model._sh_coordinates_dc[selected_pts_mask]
         new_sh_coordinates_rest = self.model._sh_coordinates_rest[selected_pts_mask]
-        
+        new_sh_coordinates_obj = self.model._sh_coordinates_obj[selected_pts_mask]
+
         self.densification_postfix(
             new_points=new_points,
             new_densities=new_densities, 
@@ -186,6 +192,7 @@ class SuGaRDensifier():
             new_quaternions=new_quaternions,
             new_sh_coordinates_dc=new_sh_coordinates_dc, 
             new_sh_coordinates_rest=new_sh_coordinates_rest,
+            new_sh_coordinates_obj=new_sh_coordinates_obj,
         )
     
     def densify_and_split(self, grads, max_grad, extent, N=2):
@@ -212,7 +219,8 @@ class SuGaRDensifier():
         new_densities = self.model.all_densities[selected_pts_mask].repeat(N,1)
         new_sh_coordinates_dc = self.model._sh_coordinates_dc[selected_pts_mask].repeat(N,1,1)
         new_sh_coordinates_rest = self.model._sh_coordinates_rest[selected_pts_mask].repeat(N,1,1)
-        
+        new_sh_coordinates_obj = self.model._sh_coordinates_obj[selected_pts_mask].repeat(N,1,1)
+
         self.densification_postfix(
             new_points=new_points,
             new_densities=new_densities, 
@@ -220,6 +228,7 @@ class SuGaRDensifier():
             new_quaternions=new_quaternions,
             new_sh_coordinates_dc=new_sh_coordinates_dc, 
             new_sh_coordinates_rest=new_sh_coordinates_rest,
+            new_sh_coordinates_obj=new_sh_coordinates_obj,
         )
 
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device=self.model.device, dtype=bool)))
