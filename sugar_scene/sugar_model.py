@@ -2140,6 +2140,7 @@ class SuGaR(nn.Module):
         positions:torch.Tensor=None,
         point_colors = None,
         point_opacities = None,
+        add_label = False, # Semantic related
         ):
         """Render an image using the Gaussian Splatting Rasterizer.
 
@@ -2313,16 +2314,26 @@ class SuGaR(nn.Module):
                 print("quaternions", quaternions.shape)
                 print("scales", scales.shape)
             print("screenspace_points", screenspace_points.shape)
+    
+        # import pdb
+        # pdb.set_trace()
         
-        rendered_image, radii = rasterizer(
+        # Add obj
+        sh_obj = torch.zeros((self.nerfmodel.gaussians.get_xyz.shape[0], 1, self.nerfmodel.gaussians.num_objects), device='cuda', requires_grad=False)
+        if add_label is True: 
+            sh_obj = self.nerfmodel.gaussians.get_object().requires_grad_(True)
+
+        rendered_image, radii, rendered_objects = rasterizer(
             means3D = positions,
             means2D = means2D,
             shs = shs,
+            sh_objs = sh_obj, # add obj
             colors_precomp = splat_colors,
             opacities = splat_opacities,
             scales = scales,
             rotations = quaternions,
-            cov3D_precomp = cov3D)
+            cov3D_precomp = cov3D
+        )
         
         if not(return_2d_radii or return_opacities or return_colors):
             return rendered_image.transpose(0, 1).transpose(1, 2)
@@ -2330,6 +2341,7 @@ class SuGaR(nn.Module):
         else:
             outputs = {
                 "image": rendered_image.transpose(0, 1).transpose(1, 2),
+                "label": rendered_objects,
                 "radii": radii,
                 "viewspace_points": screenspace_points,
             }

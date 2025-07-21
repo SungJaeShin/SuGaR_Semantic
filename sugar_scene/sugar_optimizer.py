@@ -15,6 +15,11 @@ class OptimizationParams():
                  opacity_lr:float=0.05,
                  scaling_lr:float=0.005,
                  rotation_lr:float=0.001,
+                 reg3d_interval:int=2,
+                 reg3d_k:int=5, 
+                 reg3d_lambda_val:int=2,
+                 reg3d_max_points:int=300000,
+                 reg3d_sample_size:int=1000
                  ):
         
         # Basic Gaussian Splatting
@@ -28,6 +33,13 @@ class OptimizationParams():
         self.scaling_lr = scaling_lr
         self.rotation_lr = rotation_lr
 
+        # For semantic
+        self.reg3d_interval = 2
+        self.reg3d_k = 5
+        self.reg3d_lambda_val = 2
+        self.reg3d_max_points = 300000
+        self.reg3d_sample_size = 1000
+
     def __str__(self):
         return f"""OptimizationParams(
             iterations={self.iterations},
@@ -39,6 +51,11 @@ class OptimizationParams():
             opacity_lr={self.opacity_lr},
             scaling_lr={self.scaling_lr},
             rotation_lr={self.rotation_lr},
+            reg3d_interval={self.reg3d_interval},
+            reg3d_k={self.reg3d_k},
+            reg3d_lambda_val={self.reg3d_lambda_val},
+            reg3d_max_points={self.reg3d_max_points},
+            reg3d_sample_size={self.reg3d_sample_size},
             )"""
 
 

@@ -31,7 +31,8 @@ class ModelParams():
         self.white_background = False
         self.data_device = "cuda"
         self.eval = False
-    
+        self.num_classes = 200 # For semantic
+        self._object_path = "object_mask"
         
 class PipelineParams():
     """Parameters of the Gaussian Splatting pipeline.
@@ -66,7 +67,13 @@ class OptimizationParams():
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
         self.densify_grad_threshold = 0.0002
-
+        
+        # For semantic
+        self.reg3d_interval = 2
+        self.reg3d_k = 5
+        self.reg3d_lambda_val = 2
+        self.reg3d_max_points = 300000
+        self.reg3d_sample_size = 1000
 
 class GaussianSplattingWrapper:
     """Class to wrap original Gaussian Splatting models and facilitates both usage and integration with PyTorch3D.
@@ -123,7 +130,7 @@ class GaussianSplattingWrapper:
         self.model_params = model_params
         self.pipeline_params = pipeline_params
         self.opt_params = opt_params
-        
+
         if white_background:
             background = [1., 1., 1.]
         
@@ -157,17 +164,28 @@ class GaussianSplattingWrapper:
         # ns_cameras = convert_camera_from_gs_to_nerfstudio(self.cam_list)
         # self.training_cameras = NeRFCameras.from_ns_cameras(ns_cameras)
         self.training_cameras = CamerasWrapper(self.cam_list)
-            
+
         self.gaussians = GaussianModel(self.model_params.sh_degree)
-        self.gaussians.load_ply(
-            os.path.join(
-                output_path,
-                "point_cloud",
-                "iteration_" + str(iteration_to_load),
-                "point_cloud.ply"
-                )
-            )
-        
+#        self.gaussians.load_ply(
+#            os.path.join(
+#                output_path,
+#                "point_cloud",
+#                "iteration_" + str(iteration_to_load),
+#                "point_cloud.ply"
+#                )
+#            )
+
+        ply_path = os.path.join(
+            output_path,
+            "point_cloud",
+            "iteration_" + str(iteration_to_load),
+            "point_cloud.ply"
+        )
+        if os.path.exists(ply_path):
+            self.gaussians.load_ply(ply_path)
+        else:
+            self.gaussians._xyz = torch.zeros((1, 3), dtype=torch.float32, device="cuda")
+    
         self.background = torch.tensor(background, device='cuda', dtype=torch.float32)
 
     @property
@@ -219,7 +237,46 @@ class GaussianSplattingWrapper:
         else:
             image = render_pkg["render"]
             return image.permute(1, 2, 0)
-    
+
+    def render_semantic_image(
+        self,
+        nerf_cameras:CamerasWrapper=None, 
+        camera_indices:int=0,
+        return_whole_package=False,
+        add_label=True):
+        """Render an image with Gaussian Splatting rasterizer.
+
+        Args:
+            nerf_cameras (CamerasWrapper, optional): Set of cameras. 
+                If None, uses the training cameras, but can be any set of cameras. Defaults to None.
+            camera_indices (int, optional): Index of the camera to render in the set of cameras. 
+                Defaults to 0.
+            return_whole_package (bool, optional): If True, returns the whole output package 
+                as computed in the original rasterizer from 3D Gaussian Splatting paper. Defaults to False.
+            add label (bool, optinal): If True, returns the render semantic image 
+        Returns:
+            Tensor or Dict: A tensor of the rendered semantic image, or the whole output package.
+        """
+        
+        if nerf_cameras is None:
+            gs_cameras = self.cam_list
+        else:
+            gs_cameras = nerf_cameras.gs_cameras
+        
+        camera = gs_cameras[camera_indices]
+        render_pkg = gs_render(camera, self.gaussians, 
+                            self.pipeline_params, 
+                            # bg_color=torch.zeros(3, device='cuda'),
+                            bg_color=self.background,
+                            add_label=add_label
+                            )
+        
+        if return_whole_package:
+            return render_pkg
+        else:
+            image = render_pkg["render_object"]
+            return image
+
     def get_gt_image(self, camera_indices:int, to_cuda=False):
         """Returns the ground truth image corresponding to the training camera at the given index.
 

@@ -30,7 +30,10 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
         List of GSCameras: List of Gaussian Splatting cameras.
     """
     image_dir = os.path.join(source_path, 'images')
-    
+
+    # Semantic related
+    object_dir = os.path.join(source_path, 'mask', 'object_mask')
+
     with open(gs_output_path + 'cameras.json') as f:
         unsorted_camera_transforms = json.load(f)
         
@@ -68,9 +71,14 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
     else:
         print(f"Found image extension {extension}")
     
+    # Scene info (w/ camera info)
     for cam_idx in range(len(camera_transforms)):
         camera_transform = camera_transforms[cam_idx]
         
+        # Get Semantic mask related 
+        object_path = os.path.join(object_dir, camera_transforms[cam_idx]['img_name'] + '.png')
+        objects = Image.open(object_path) if os.path.exists(object_path) else None
+
         # Extrinsics
         rot = np.array(camera_transform['rotation'])
         pos = np.array(camera_transform['position'])
@@ -132,7 +140,8 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
             colmap_id=id, image=gt_image, gt_alpha_mask=None,
             R=R, T=T, FoVx=fov_x, FoVy=fov_y,
             image_name=name, uid=id,
-            image_height=image_height, image_width=image_width,)
+            image_height=image_height, image_width=image_width,
+            objects=torch.from_numpy(np.array(objects))) # Semantic Mask Related
         
         cam_list.append(gs_camera)
 
@@ -145,7 +154,7 @@ class GSCamera(torch.nn.Module):
     def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
                  image_name, uid,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda",
-                 image_height=None, image_width=None,
+                 image_height=None, image_width=None, objects=None, # Add semantic
                  ):
         """
         Args:
@@ -163,7 +172,8 @@ class GSCamera(torch.nn.Module):
             data_device (str, optional): _description_. Defaults to "cuda".
             image_height (_type_, optional): _description_. Defaults to None.
             image_width (_type_, optional): _description_. Defaults to None.
-
+            objects (torch.Tensor, optional): Per-pixel semantic label map of shape (1, H, W), 
+                                              where each pixel stores a class ID. Defaults to None.
         Raises:
             ValueError: _description_
         """
@@ -199,6 +209,12 @@ class GSCamera(torch.nn.Module):
                 self.original_image *= gt_alpha_mask.to(self.data_device)
             else:
                 self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device)
+
+        # Add semantic
+        if objects is not None:
+            self.objects = objects.to(self.data_device)
+        else:
+            self.objects = None
 
         self.zfar = 100.0  # TODO: Increase value
         self.znear = 0.01
@@ -403,6 +419,9 @@ def convert_camera_from_pytorch3d_to_gs(
         
         name = 'image_' + str(cam_idx)
         
+        import pdb
+        pdb.set_trace()
+
         camera = GSCamera(
             colmap_id=cam_idx, image=None, gt_alpha_mask=None,
             R=R, T=T, FoVx=FovX, FoVy=FovY,

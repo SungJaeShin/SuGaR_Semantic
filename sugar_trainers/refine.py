@@ -42,14 +42,21 @@ def refined_training(args):
     use_same_scale_in_all_directions = False  # Should be False
     sh_levels = 4  
 
-        
+    # -----Add semantic features-----
+    add_label = args.add_semantic # Semantic related
+    
+    num_classes = 200
+    reg3d_interval = 2
+    reg3d_k = 5
+    reg3d_lambda_val = 2
+    reg3d_max_points = 300000
+    reg3d_sample_size = 1000
+
     # -----Radiance Mesh-----
     triangle_scale=1.
     
-        
     # -----Rendering parameters-----
     compute_color_in_rasterizer = True  # TODO: Try True
-
         
     # -----Optimization parameters-----
 
@@ -399,6 +406,12 @@ def refined_training(args):
     else:
         bg_tensor = torch.zeros(3, dtype=torch.float, device=nerfmodel.device)
     
+    # Add semantic label
+    classifier = torch.nn.Conv2d(nerfmodel.gaussians.num_objects, num_classes, kernel_size=1)
+    cls_criterion = torch.nn.CrossEntropyLoss(reduction='none')
+    cls_optimizer = torch.optim.Adam(classifier.parameters(), lr=5e-4)
+    classifier.cuda()
+
     # ====================Initialize SuGaR model====================
     # Construct SuGaR model
     sugar = SuGaR(
@@ -470,7 +483,13 @@ def refined_training(args):
         opacity_lr=opacity_lr,
         scaling_lr=scaling_lr,
         rotation_lr=rotation_lr,
+        reg3d_interval=reg3d_interval,
+        reg3d_k=reg3d_k,
+        reg3d_lambda_val=reg3d_lambda_val,
+        reg3d_max_points=reg3d_max_points,
+        reg3d_sample_size=reg3d_sample_size
     )
+
     optimizer = SuGaROptimizer(sugar, opt_params, spatial_lr_scale=spatial_lr_scale)
     CONSOLE.print("Optimizer initialized.")
     CONSOLE.print("Optimization parameters:")
@@ -563,6 +582,7 @@ def refined_training(args):
                     quaternions=None,
                     use_same_scale_in_all_directions=use_same_scale_in_all_directions,
                     return_opacities=enforce_entropy_regularization,
+                    add_label=add_label
                     )
                 if use_densifier or regularize or enforce_entropy_regularization:
                     pred_rgb = outputs['image'].view(-1, 
@@ -583,6 +603,9 @@ def refined_training(args):
                 gt_image = nerfmodel.get_gt_image(camera_indices=camera_indices)           
                 gt_rgb = gt_image.view(-1, sugar.image_height, sugar.image_width, 3)
                 gt_rgb = gt_rgb.transpose(-1, -2).transpose(-2, -3)
+
+                import pdb
+                pdb.set_trace()
                     
                 # Compute loss 
                 loss = loss_fn(pred_rgb, gt_rgb)
@@ -639,6 +662,7 @@ def refined_training(args):
                                                 return_2d_radii=False,
                                                 use_same_scale_in_all_directions=False,
                                                 point_colors=point_depth,
+                                                add_label=add_label,
                                             )[..., 0]
                                 else:
                                     with torch.no_grad():
@@ -653,6 +677,7 @@ def refined_training(args):
                                                     return_2d_radii=False,
                                                     use_same_scale_in_all_directions=False,
                                                     point_colors=point_depth,
+                                                    add_label=add_label,
                                                 )[..., 0]
                                 
                                 # If needed, compute which gaussians are close to the surface in the depth map.
