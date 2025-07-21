@@ -43,6 +43,11 @@ if __name__ == "__main__":
     parser.add_argument('--export_ply', type=str2bool, default=True, 
                         help='If True, export a ply files with the refined 3D Gaussians at the end of the training.')
 
+    parser.add_argument('--add_semantic', type=bool, default=False, 
+                        help='If True, Result Gaussian (w/ mesh) has semantic features.')
+
+
+
     args = parser.parse_args()
     
     # Call function
