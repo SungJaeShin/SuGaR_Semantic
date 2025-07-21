@@ -8,7 +8,7 @@ from sugar_scene.gs_model import GaussianSplattingWrapper, fetchPly
 from sugar_scene.sugar_model import SuGaR, convert_refined_sugar_into_gaussians
 from sugar_scene.sugar_optimizer import OptimizationParams, SuGaROptimizer
 from sugar_scene.sugar_densifier import SuGaRDensifier
-from sugar_utils.loss_utils import ssim, l1_loss, l2_loss
+from sugar_utils.loss_utils import ssim, l1_loss, l2_loss, loss_cls_3d
 
 from rich.console import Console
 import time
@@ -443,13 +443,15 @@ def refined_training(args):
                 sugar.all_densities[...] = nerfmodel.gaussians._opacity.detach()[start_prune_mask]
                 sugar._sh_coordinates_dc[...] = nerfmodel.gaussians._features_dc.detach()[start_prune_mask]
                 sugar._sh_coordinates_rest[...] = nerfmodel.gaussians._features_rest.detach()[start_prune_mask]
+                sugar._sh_coordinates_obj[...] = nerfmodel.gaussians._features_obj.detach()[start_prune_mask] # Add semantic
             else:
                 sugar._scales[...] = nerfmodel.gaussians._scaling.detach()
                 sugar._quaternions[...] = nerfmodel.gaussians._rotation.detach()
                 sugar.all_densities[...] = nerfmodel.gaussians._opacity.detach()
                 sugar._sh_coordinates_dc[...] = nerfmodel.gaussians._features_dc.detach()
                 sugar._sh_coordinates_rest[...] = nerfmodel.gaussians._features_rest.detach()
-        
+                sugar._sh_coordinates_obj[...] = nerfmodel.gaussians._features_obj.detach() # Add semantic
+    
     CONSOLE.print(f'\nSuGaR model has been initialized.')
     CONSOLE.print(sugar)
     CONSOLE.print(f'Number of parameters: {sum(p.numel() for p in sugar.parameters() if p.requires_grad)}')
@@ -570,7 +572,7 @@ def refined_training(args):
             
             # Computing rgb predictions
             if not no_rendering:
-                outputs = sugar.render_image_gaussian_rasterizer( 
+                outputs, rendered_objects = sugar.render_image_gaussian_rasterizer( 
                     camera_indices=camera_indices.item(),
                     verbose=False,
                     bg_color = bg_tensor,
@@ -606,10 +608,26 @@ def refined_training(args):
 
                 import pdb
                 pdb.set_trace()
-                    
-                # Compute loss 
-                loss = loss_fn(pred_rgb, gt_rgb)
-                        
+
+                # # Compute loss # Original
+                # loss = loss_fn(pred_rgb, gt_rgb)
+
+                # Semantic Related
+                gt_obj = nerfmodel.get_gt_sem_obj(camera_indices=camera_indices)
+                render_obj = rendered_objects
+                logits = classifier(render_obj)
+                loss_obj = cls_criterion(logits.unsqueeze(0), gt_obj.unsqueeze(0)).squeeze().mean()
+                loss_obj = loss_obj / torch.log(torch.tensor(num_classes)) # normalize
+
+                loss_obj_3d = None
+                if iteration % reg3d_interval == 0:
+                    logits3d = classifier(nerfmodel.gaussians._features_obj.permute(2, 0, 1))
+                    prob_obj3d = torch.softmax(logits3d, dim=0).squeeze().permute(1, 0)
+                    loss_obj_3d = loss_cls_3d(nerfmodel.gaussians._xyz.squeeze().detach(), prob_obj3d, reg3d_k, reg3d_lambda_val, reg3d_max_points, reg3d_sample_size)
+                    loss = loss_fn(pred_rgb, gt_rgb) + loss_obj + loss_obj_3d
+                else:
+                    loss = loss_fn(pred_rgb, gt_rgb) + loss_obj
+                            
                 if enforce_entropy_regularization and iteration > start_entropy_regularization_from and iteration < end_entropy_regularization_at:
                     if iteration == start_entropy_regularization_from + 1:
                         CONSOLE.print("\n---INFO---\nStarting entropy regularization.")
