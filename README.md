@@ -52,11 +52,11 @@
 
 ---
 ### License
-This project inherits its license terms from the `SuGaR` and `Gaussian-Grouping` repository.
+This project inherits its license terms from the **SuGaR** and **Gaussian-Grouping** repository.
 Accordingly, this work is licensed for research and evaluation purposes only, under the same non-commercial license as Gaussian Splatting and SuGaR.
 Commercial use, distribution, or sublicensing is not permitted without prior and explicit consent from the original authors.
 Please contact the original authors (Inria, MPII) for any licensing inquiries related to commercial applications.
-For more information, refer to the `Gaussian Splatting` License.
+For more information, refer to the **Gaussian Splatting** License.
 
 
 
