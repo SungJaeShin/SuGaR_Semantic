@@ -10,7 +10,8 @@
 ### Preparing Dataset
 (1) Same as SuGaR process: COLMAP based dataset <br>
 (2) Object mask dataset: Following Gaussian-Grouping [prepare_pseudo_label.sh](https://github.com/lkeab/gaussian-grouping/blob/0ab60afed3385b717c985af1d30a20f7b0884c89/script/prepare_pseudo_label.sh) <br>
-(3) both dataset all same folder
+(3) both dataset all same folder <br>
+(4) Mesh result (trained from (1) dataset)
 
 ---
 ### Installation
