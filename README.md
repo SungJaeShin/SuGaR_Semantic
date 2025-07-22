@@ -35,6 +35,8 @@
     $ pip3 install -e ./src/pytorch3d
     $ pip3 install plotly==5.18.0
     $ pip3 install rich==13.7.0
+    $ pip3 install ./src/SuGaR_SemanticGS/gaussian_splatting/submodules/diff-gaussian-rasterization
+    $ pip3 install ./src/SuGaR_SemanticGS/gaussian_splatting/submodules/simple-knn
   ```
 
 ---
