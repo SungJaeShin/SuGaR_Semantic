@@ -46,5 +46,5 @@
 ```
 
 ### Parameters related semantic 
-(1) `num_classes`: Number of semantic categories for training; default is **256.**
+(1) `num_classes`: Number of semantic categories for training; default is **256.** <br>
 (2) `num_objects`: Number of object-level semantic feature channels used for training and rendering; default is **16.**
