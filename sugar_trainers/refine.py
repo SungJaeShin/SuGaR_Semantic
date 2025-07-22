@@ -411,13 +411,15 @@ def refined_training(args):
     cls_criterion = torch.nn.CrossEntropyLoss(reduction='none')
     cls_optimizer = torch.optim.Adam(classifier.parameters(), lr=5e-4)
     classifier.cuda()
-
+    init_obj = torch.zeros((n_points, 1, nerfmodel.gaussians.num_objects), device=nerfmodel.device)
+    
     # ====================Initialize SuGaR model====================
     # Construct SuGaR model
     sugar = SuGaR(
         nerfmodel=nerfmodel,
         points=points, #nerfmodel.gaussians.get_xyz.data,
         colors=colors, #0.5 + _C0 * nerfmodel.gaussians.get_features.data[:, 0, :],
+        objs=init_obj, # add label
         initialize=True,
         sh_levels=sh_levels,
         learnable_positions=learnable_positions,
@@ -501,7 +503,6 @@ def refined_training(args):
     for param_group in optimizer.optimizer.param_groups:
         CONSOLE.print(param_group['name'], param_group['lr'])
         
-        
     # ====================Initialize densifier====================
     if use_densifier:
         gaussian_densifier = SuGaRDensifier(
@@ -515,7 +516,6 @@ def refined_training(args):
             )
         CONSOLE.print("Densifier initialized.")
         
-    
     # ====================Loss function====================
     if loss_function == 'l1':
         loss_fn = l1_loss
@@ -525,7 +525,6 @@ def refined_training(args):
         def loss_fn(pred_rgb, gt_rgb):
             return (1.0 - dssim_factor) * l1_loss(pred_rgb, gt_rgb) + dssim_factor * (1.0 - ssim(pred_rgb, gt_rgb))
     CONSOLE.print(f'Using loss function: {loss_function}')
-    
     
     # ====================Start training====================
     sugar.train()
