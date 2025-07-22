@@ -84,7 +84,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     # Add obj
     sh_obj = torch.zeros((pc.get_xyz().shape[0], 1, pc.num_objects), device='cuda', requires_grad=False)
     if add_label is True: 
-        sh_obj = pc.get_object().requires_grad_(True)
+        sh_obj = pc.get_object.requires_grad_(True)
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen).
     rendered_image, radii, rendered_objects = rasterizer(
