@@ -45,3 +45,6 @@
   $ TORCH_USE_CUDA_DSA=1 CUDA_LAUNCH_BLOCKING=1 python3 train_refined.py --add_semantic true --scene_path ${SCENE_PATH} --checkpoint_path ${CHECKPOINT_PATH} --mesh_path ${MESH}.ply --output_dir ${RESULT_PATH}
 ```
 
+### Parameters related semantic 
+(1) `num_classes`: Number of semantic categories for training; default is **256.**
+(2) `num_objects`: Number of object-level semantic feature channels used for training and rendering; default is **16.**
