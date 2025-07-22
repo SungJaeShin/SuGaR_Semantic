@@ -31,7 +31,7 @@ class ModelParams():
         self.white_background = False
         self.data_device = "cuda"
         self.eval = False
-        self.num_classes = 200 # For semantic
+        self.num_classes = 256 # For semantic
         self._object_path = "object_mask"
         
 class PipelineParams():

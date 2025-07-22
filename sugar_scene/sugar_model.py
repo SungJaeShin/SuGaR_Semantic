@@ -1,6 +1,7 @@
 import torch.nn as nn
 from torch.nn.functional import normalize as torch_normalize
 import open3d as o3d
+from tqdm import tqdm
 from pytorch3d.renderer import TexturesUV, TexturesVertex
 from pytorch3d.structures import Meshes
 from pytorch3d.transforms import quaternion_apply, quaternion_invert, matrix_to_quaternion, quaternion_to_matrix
@@ -15,7 +16,7 @@ from sugar_utils.graphics_utils import *
 from sugar_utils.general_utils import inverse_sigmoid
 from sugar_scene.gs_model import GaussianSplattingWrapper, GaussianModel
 from sugar_scene.cameras import CamerasWrapper
-
+from sugar_utils.semantic_utils import feature_to_rgb
 
 scale_activation = torch.exp
 scale_inverse_activation = torch.log
@@ -383,11 +384,14 @@ class SuGaR(nn.Module):
         ).to(device)
         
         # _surface_mesh_faces (# of mesh triangles = # of init gs points) 
-        # Initialize semantic features     
+        # Initialize semantic features
+        objs = RGB2SH(objs)
+        objs = objs[:, :, None]
         if objs.shape[0] != n_points:
-            objs = torch.zeros((n_points, 1, self.nerfmodel.gaussians.num_objects), device=device)
+            objs = RGB2SH(torch.rand((n_points, self.nerfmodel.gaussians.num_objects), device=device))
+            objs = objs[:, :, None]
         self._sh_coordinates_obj = nn.Parameter(
-            objs, #.transpose(1, 2).contiguous(),  # (N, 1, D)
+            objs.transpose(1, 2).contiguous(),  # (N, D, 1) -> (N, 1, D)
             requires_grad=True and (not freeze_gaussians)
         ).to(device)
 
@@ -2333,15 +2337,18 @@ class SuGaR(nn.Module):
             print("screenspace_points", screenspace_points.shape)
 
         # Add obj
-        sh_obj = torch.zeros((self.nerfmodel.gaussians.get_xyz.shape[0], 1, self.nerfmodel.gaussians.num_objects), device='cuda', requires_grad=False)
         if add_label is True: 
-            sh_obj = self.nerfmodel.gaussians.get_object.requires_grad_(True)
+            sh_objs = self._sh_coordinates_obj
+        else:   
+            sh_obj = RGB2SH(torch.rand((self.n_points, self.nerfmodel.gaussians.num_objects), device=self.device))
+            sh_obj = sh_obj[:, :, None]
+            sh_objs = nn.Parameter(sh_obj.transpose(1, 2).contiguous(), requires_grad=True).to(self.device)
 
         rendered_image, radii, rendered_objects = rasterizer(
             means3D = positions,
             means2D = means2D,
             shs = shs,
-            sh_objs = sh_obj, # add obj
+            sh_objs = sh_objs, # add obj
             colors_precomp = splat_colors,
             opacities = splat_opacities,
             scales = scales,
@@ -2349,19 +2356,8 @@ class SuGaR(nn.Module):
             cov3D_precomp = cov3D
         )
 
-        # print("rendered_image.shape:", rendered_image.shape)
-        # print("NaN check:", torch.isnan(rendered_image).any().item())
-        # print("Inf check:", torch.isinf(rendered_image).any().item())
-
-        # print(f"rendered img: {rendered_image}")
-        # print(f"rendered objects: {rendered_objects}")
-
-        import pdb
-        pdb.set_trace()
-
         if not(return_2d_radii or return_opacities or return_colors):
             return rendered_image, rendered_objects
-        
         else:
             outputs = {
                 "image": rendered_image.transpose(0, 1).transpose(1, 2),
@@ -2429,6 +2425,17 @@ class SuGaR(nn.Module):
             checkpoint[k] = v
         torch.save(checkpoint, path)        
 
+    def save_semantic_render_imgs(self, path):
+        training_cameras = self.nerfmodel.training_cameras
+        for cam_idx in tqdm(range(len(training_cameras)), desc='Saving Semantic Render Imgs'):
+            _, objects = self.render_image_gaussian_rasterizer(
+                camera_indices=cam_idx,
+                sh_deg=0,
+                compute_color_in_rasterizer=True,
+                add_label=True
+            )
+            semantic = feature_to_rgb(objects)
+            Image.fromarray(semantic).save(os.path.join(path, f'obj_{cam_idx:05d}.png'))
 
 def load_refined_model(refined_sugar_path, nerfmodel:GaussianSplattingWrapper, device=None):
     if device is None:

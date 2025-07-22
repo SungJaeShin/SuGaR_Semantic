@@ -4,6 +4,7 @@ import json
 import numpy as np
 import torch
 from PIL import Image
+from tqdm import tqdm
 
 from pytorch3d.renderer import FoVPerspectiveCameras as P3DCameras
 from pytorch3d.renderer.cameras import _get_sfm_calibration_matrix
@@ -72,13 +73,18 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
         print(f"Found image extension {extension}")
     
     # Scene info (w/ camera info)
-    for cam_idx in range(len(camera_transforms)):
+    for cam_idx in tqdm(range(len(camera_transforms)), desc='Loading cameras'):
         camera_transform = camera_transforms[cam_idx]
         
         # Get Semantic mask related 
         object_path = os.path.join(object_dir, camera_transforms[cam_idx]['img_name'] + '.png')
         objects = Image.open(object_path) if os.path.exists(object_path) else None
-
+        # # [For debugging]
+        # if objects is not None:
+        #     tqdm.write(f"{cam_idx}-th object size: {objects.size}")
+        # else:
+        #     tqdm.write(f"{cam_idx}-th object size: None")
+            
         # Extrinsics
         rot = np.array(camera_transform['rotation'])
         pos = np.array(camera_transform['position'])
@@ -104,7 +110,7 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
         id = camera_transform['id']
         name = camera_transform['img_name']
         image_path = os.path.join(image_dir,  name + extension)
-        
+
         if load_gt_images:
             image = Image.open(image_path)
             if white_background:
@@ -125,6 +131,9 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
             resized_image_rgb = PILtoTorch(image, resolution)
             gt_image = resized_image_rgb[:3, ...]
             
+            if objects is not None:
+                objects = objects.resize(resolution, Image.NEAREST) # Keep label unchange and same as original image
+
             image_height, image_width = None, None
         else:
             gt_image = None
@@ -144,6 +153,7 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
             objects=torch.from_numpy(np.array(objects))) # Semantic Mask Related
         cam_list.append(gs_camera)
 
+    print(f"Finish load {len(cam_list)} cameras !!!")
     return cam_list
 
 
@@ -171,7 +181,7 @@ class GSCamera(torch.nn.Module):
             data_device (str, optional): _description_. Defaults to "cuda".
             image_height (_type_, optional): _description_. Defaults to None.
             image_width (_type_, optional): _description_. Defaults to None.
-            objects (torch.Tensor, optional): Per-pixel semantic label map of shape (1, H, W), 
+            objects (torch.Tensor, optional): Per-pixel semantic label map of shape (H, W), 
                                               where each pixel stores a class ID. Defaults to None.
         Raises:
             ValueError: _description_
