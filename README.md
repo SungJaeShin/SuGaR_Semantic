@@ -45,6 +45,18 @@
   $ TORCH_USE_CUDA_DSA=1 CUDA_LAUNCH_BLOCKING=1 python3 train_refined.py --add_semantic true --scene_path ${SCENE_PATH} --checkpoint_path ${CHECKPOINT_PATH} --mesh_path ${MESH}.ply --output_dir ${RESULT_PATH}
 ```
 
+---
 ### Parameters related semantic 
 (1) `num_classes`: Number of semantic categories for training; default is **256.** <br>
 (2) `num_objects`: Number of object-level semantic feature channels used for training and rendering; default is **16.**
+
+---
+### License
+This project inherits its license terms from the SuGaR and Gaussian-Grouping repository.
+Accordingly, this work is licensed for research and evaluation purposes only, under the same non-commercial license as Gaussian Splatting and SuGaR.
+Commercial use, distribution, or sublicensing is not permitted without prior and explicit consent from the original authors.
+Please contact the original authors (Inria, MPII) for any licensing inquiries related to commercial applications.
+For more information, refer to the Gaussian Splatting License.
+
+
+
