@@ -850,6 +850,8 @@ def refined_training(args):
             # Optimization step
             optimizer.step()
             optimizer.zero_grad(set_to_none = True)
+            cls_optimizer.step() # semantic related
+            cls_optimizer.zero_grad() # semantic related
             
             # Print loss
             if iteration==1 or iteration % print_loss_every_n_iterations == 0:
@@ -919,9 +921,12 @@ def refined_training(args):
     CONSOLE.print("Final model saved.")
     
     if add_label is True:
-        model_path = os.path.join(sugar_checkpoint_path, 'render_semantic')
-        os.makedirs(model_path, exist_ok=True)
-        sugar.save_semantic_render_imgs(path=model_path)
+        semantic_img_path = os.path.join(sugar_checkpoint_path, 'render_semantic')
+        os.makedirs(semantic_img_path, exist_ok=True)
+        sugar.save_semantic_render_imgs(path=semantic_img_path)
+        # Classifier path
+        classifier_model_path = os.path.join(sugar_checkpoint_path, 'classifier')
+        torch.save(classifier.state_dict(), os.path.join(classifier_model_path, "classifier.pth"))
         CONSOLE.print("Semantic Render Image saved.")
 
     if export_ply_at_the_end:
