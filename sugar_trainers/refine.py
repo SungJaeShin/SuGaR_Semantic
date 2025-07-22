@@ -45,7 +45,7 @@ def refined_training(args):
     # -----Add semantic features-----
     add_label = args.add_semantic # Semantic related
     
-    num_classes = 200
+    num_classes = 256
     reg3d_interval = 2
     reg3d_k = 5
     reg3d_lambda_val = 2
@@ -411,7 +411,7 @@ def refined_training(args):
     cls_criterion = torch.nn.CrossEntropyLoss(reduction='none')
     cls_optimizer = torch.optim.Adam(classifier.parameters(), lr=5e-4)
     classifier.cuda()
-    init_obj = torch.zeros((n_points, 1, nerfmodel.gaussians.num_objects), device=nerfmodel.device)
+    init_obj = torch.rand((n_points, nerfmodel.gaussians.num_objects), device=nerfmodel.device)
     
     # ====================Initialize SuGaR model====================
     # Construct SuGaR model
@@ -525,7 +525,7 @@ def refined_training(args):
         def loss_fn(pred_rgb, gt_rgb):
             return (1.0 - dssim_factor) * l1_loss(pred_rgb, gt_rgb) + dssim_factor * (1.0 - ssim(pred_rgb, gt_rgb))
     CONSOLE.print(f'Using loss function: {loss_function}')
-    
+
     # ====================Start training====================
     sugar.train()
     epoch = 0
@@ -568,7 +568,7 @@ def refined_training(args):
             end_idx = min(i+train_num_images_per_batch, train_num_images)
             
             camera_indices = shuffled_idx[start_idx:end_idx]
-            
+
             # Computing rgb predictions
             if not no_rendering:
                 outputs, rendered_objects = sugar.render_image_gaussian_rasterizer( 
@@ -605,28 +605,28 @@ def refined_training(args):
                 gt_rgb = gt_image.view(-1, sugar.image_height, sugar.image_width, 3)
                 gt_rgb = gt_rgb.transpose(-1, -2).transpose(-2, -3)
 
-                import pdb
-                pdb.set_trace()
-
-                # # Compute loss # Original
-                # loss = loss_fn(pred_rgb, gt_rgb)
-
                 # Semantic Related
                 gt_obj = nerfmodel.get_gt_sem_obj(camera_indices=camera_indices)
+                gt_obj = gt_obj.long()
+                gt_obj = gt_obj.clone()
                 render_obj = rendered_objects
                 logits = classifier(render_obj)
+
                 loss_obj = cls_criterion(logits.unsqueeze(0), gt_obj.unsqueeze(0)).squeeze().mean()
                 loss_obj = loss_obj / torch.log(torch.tensor(num_classes)) # normalize
 
                 loss_obj_3d = None
                 if iteration % reg3d_interval == 0:
-                    logits3d = classifier(nerfmodel.gaussians._features_obj.permute(2, 0, 1))
+                    logits3d = classifier(sugar.sh_coordinates_obj.permute(2, 0, 1))
                     prob_obj3d = torch.softmax(logits3d, dim=0).squeeze().permute(1, 0)
-                    loss_obj_3d = loss_cls_3d(nerfmodel.gaussians._xyz.squeeze().detach(), prob_obj3d, reg3d_k, reg3d_lambda_val, reg3d_max_points, reg3d_sample_size)
+                    loss_obj_3d = loss_cls_3d(sugar.points.squeeze().detach(), prob_obj3d, reg3d_k, reg3d_lambda_val, reg3d_max_points, reg3d_sample_size)
                     loss = loss_fn(pred_rgb, gt_rgb) + loss_obj + loss_obj_3d
                 else:
                     loss = loss_fn(pred_rgb, gt_rgb) + loss_obj
-                            
+
+                # # Compute loss # Original
+                # loss = loss_fn(pred_rgb, gt_rgb)
+
                 if enforce_entropy_regularization and iteration > start_entropy_regularization_from and iteration < end_entropy_regularization_at:
                     if iteration == start_entropy_regularization_from + 1:
                         CONSOLE.print("\n---INFO---\nStarting entropy regularization.")
@@ -867,6 +867,7 @@ def refined_training(args):
                     CONSOLE.print("Quaternions:", sugar.quaternions.min().item(), sugar.quaternions.max().item(), sugar.quaternions.mean().item(), sugar.quaternions.std().item(), sep='   ')
                     CONSOLE.print("Sh coordinates dc:", sugar._sh_coordinates_dc.min().item(), sugar._sh_coordinates_dc.max().item(), sugar._sh_coordinates_dc.mean().item(), sugar._sh_coordinates_dc.std().item(), sep='   ')
                     CONSOLE.print("Sh coordinates rest:", sugar._sh_coordinates_rest.min().item(), sugar._sh_coordinates_rest.max().item(), sugar._sh_coordinates_rest.mean().item(), sugar._sh_coordinates_rest.std().item(), sep='   ')
+                    CONSOLE.print("Sh coordinates obj:", sugar._sh_coordinates_obj.min().item(), sugar._sh_coordinates_obj.max().item(), sugar._sh_coordinates_obj.mean().item(), sugar._sh_coordinates_obj.std().item(), sep='   ')
                     CONSOLE.print("Opacities:", sugar.strengths.min().item(), sugar.strengths.max().item(), sugar.strengths.mean().item(), sugar.strengths.std().item(), sep='   ')
                     if regularize_sdf and iteration > start_sdf_regularization_from:
                         CONSOLE.print("Number of gaussians used for sampling in SDF regularization:", n_gaussians_in_sampling)
@@ -917,6 +918,12 @@ def refined_training(args):
 
     CONSOLE.print("Final model saved.")
     
+    if add_label is True:
+        model_path = os.path.join(sugar_checkpoint_path, 'render_semantic')
+        os.makedirs(model_path, exist_ok=True)
+        sugar.save_semantic_render_imgs(path=model_path)
+        CONSOLE.print("Semantic Render Image saved.")
+
     if export_ply_at_the_end:
         # Build path
         CONSOLE.print("\nExporting ply file with refined Gaussians...")
