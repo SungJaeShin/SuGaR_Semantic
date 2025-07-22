@@ -1,5 +1,5 @@
 # SuGaR + Gaussian Grouping
-## Combine SuGaR and Gaussian Grouping to jointly learn semantic features while binding Gaussian Splatting with mesh geometry.
+## Combine SuGaR and Gaussian Grouping to jointly learn semantic features while binding Gaussian Splatting with mesh geometry
 
 ### Description
 (1) Baseline Code: [SuGaR](https://github.com/Anttwo/SuGaR.git) <br>
