@@ -142,7 +142,6 @@ def load_gs_cameras(source_path, gs_output_path, image_resolution=1,
             image_name=name, uid=id,
             image_height=image_height, image_width=image_width,
             objects=torch.from_numpy(np.array(objects))) # Semantic Mask Related
-        print(f" {id}-th gs_camera.objects.shape: {gs_camera.objects.shape}")
         cam_list.append(gs_camera)
 
     return cam_list
@@ -454,7 +453,7 @@ class CamerasWrapper:
             camera_type (_type_): _description_
         """
 
-        self.gs_cameras = gs_cameras
+        self.gs_cameras = gs_cameras # including objects !
         
         self._p3d_cameras = p3d_cameras
         self._p3d_cameras_computed = p3d_cameras_computed

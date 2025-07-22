@@ -185,7 +185,7 @@ class GaussianSplattingWrapper:
             self.gaussians.load_ply(ply_path)
         else:
             self.gaussians._xyz = torch.zeros((1, 3), dtype=torch.float32, device="cuda")
-    
+
         self.background = torch.tensor(background, device='cuda', dtype=torch.float32)
 
     @property

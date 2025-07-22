@@ -92,6 +92,7 @@ class SuGaR(nn.Module):
         nerfmodel: GaussianSplattingWrapper,
         points: torch.Tensor,
         colors: torch.Tensor,
+        objs: torch.Tensor,
         initialize:bool=True,
         sh_levels:int=4,
         learnable_positions:bool=True,
@@ -172,7 +173,7 @@ class SuGaR(nn.Module):
             
             self._surface_mesh_faces = torch.nn.Parameter(
                 torch.tensor(np.array(surface_mesh_to_bind.triangles)).to(device), 
-                requires_grad=False).to(device)
+                requires_grad=False).to(device) # Get mesh points
             if surface_mesh_thickness is None:
                 if nerfmodel:
                     surface_mesh_thickness = nerfmodel.training_cameras.get_spatial_extent() / 1_000_000
@@ -381,11 +382,12 @@ class SuGaR(nn.Module):
             requires_grad=True and (not freeze_gaussians)
         ).to(device)
         
-        # Initialize semantic features
-        sh_fused_objects = RGB2SH(torch.rand(n_points, self.nerfmodel.gaussians.num_objects, device=device))
-        sh_fused_objects = sh_fused_objects[:, :, None]  # (N, D, 1)
+        # _surface_mesh_faces (# of mesh triangles = # of init gs points) 
+        # Initialize semantic features     
+        if objs.shape[0] != n_points:
+            objs = torch.zeros((n_points, 1, self.nerfmodel.gaussians.num_objects), device=device)
         self._sh_coordinates_obj = nn.Parameter(
-            sh_fused_objects.transpose(1, 2).contiguous(),  # (N, 1, D)
+            objs, #.transpose(1, 2).contiguous(),  # (N, 1, D)
             requires_grad=True and (not freeze_gaussians)
         ).to(device)
 
@@ -440,6 +442,11 @@ class SuGaR(nn.Module):
     def sh_coordinates(self):
         return torch.cat([self._sh_coordinates_dc, self._sh_coordinates_rest], dim=1)
     
+    # semantic related
+    @property
+    def sh_coordinates_obj(self):
+        return self._sh_coordinates_obj
+
     @property
     def radiuses(self):
         return torch.cat([self._quaternions, self._scales], dim=-1)[None]
@@ -2202,7 +2209,8 @@ class SuGaR(nn.Module):
         
         world_view_transform = torch.Tensor(getWorld2View(
             R=R, t=T, tensor=use_torch)).transpose(0, 1).cuda()
-        
+        # print(f"world_view_transform: {world_view_transform}")
+
         proj_transform = getProjectionMatrix(
             p3d_camera.znear.item(), 
             p3d_camera.zfar.item(), 
@@ -2213,7 +2221,7 @@ class SuGaR(nn.Module):
         proj_transform[..., 2, 1] = - p3d_camera.K[0, 1, 2]
         
         full_proj_transform = (world_view_transform.unsqueeze(0).bmm(proj_transform.unsqueeze(0))).squeeze(0)
-        
+        # print(f"full_proj_transform: {full_proj_transform}")
 
         camera_center = p3d_camera.get_camera_center()
         if verbose:
@@ -2327,7 +2335,7 @@ class SuGaR(nn.Module):
         # Add obj
         sh_obj = torch.zeros((self.nerfmodel.gaussians.get_xyz.shape[0], 1, self.nerfmodel.gaussians.num_objects), device='cuda', requires_grad=False)
         if add_label is True: 
-            sh_obj = self.nerfmodel.gaussians.get_object().requires_grad_(True)
+            sh_obj = self.nerfmodel.gaussians.get_object.requires_grad_(True)
 
         rendered_image, radii, rendered_objects = rasterizer(
             means3D = positions,
@@ -2340,6 +2348,16 @@ class SuGaR(nn.Module):
             rotations = quaternions,
             cov3D_precomp = cov3D
         )
+
+        # print("rendered_image.shape:", rendered_image.shape)
+        # print("NaN check:", torch.isnan(rendered_image).any().item())
+        # print("Inf check:", torch.isinf(rendered_image).any().item())
+
+        # print(f"rendered img: {rendered_image}")
+        # print(f"rendered objects: {rendered_objects}")
+
+        import pdb
+        pdb.set_trace()
 
         if not(return_2d_radii or return_opacities or return_colors):
             return rendered_image, rendered_objects
@@ -2440,6 +2458,7 @@ def load_refined_model(refined_sugar_path, nerfmodel:GaussianSplattingWrapper, d
         nerfmodel=nerfmodel,
         points=checkpoint['state_dict']['_points'],
         colors=SH2RGB(checkpoint['state_dict']['_sh_coordinates_dc'][:, 0, :]),
+        objs= checkpoint['state_dict']['_sh_coordinates_obj'],
         initialize=False,
         sh_levels=active_sh_degree,
         keep_track_of_knn=False,
@@ -2489,6 +2508,10 @@ def load_rc_model(
                 checkpoint['state_dict']['_scales'] = checkpoint['state_dict']['_scales'].squeeze(0)
                 checkpoint['state_dict']['_quaternions'] = checkpoint['state_dict']['_quaternions'].squeeze(0)
                 
+        if not '_sh_coordinates_obj' in checkpoint['state_dict'].keys():
+            checkpoint['state_dict']['_sh_coordinates_obj'] = checkpoint['state_dict']['sh_coordinates_obj']
+
+
     if retrocompatibility:
         checkpoint_state_dict = {}
         checkpoint_state_dict['_points'] = checkpoint['state_dict']['_points']
@@ -2497,7 +2520,8 @@ def load_rc_model(
         checkpoint_state_dict['_scales'] = checkpoint['state_dict']['_scales']
         checkpoint_state_dict['_quaternions'] = checkpoint['state_dict']['_quaternions']
         checkpoint_state_dict['all_densities'] = checkpoint['state_dict']['all_densities']
-    
+        checkpoint_state_dict['_sh_coordinates_obj'] = checkpoint['state_dict']['_sh_coordinates_obj']
+
     if not use_light_probes:
         colors = SH2RGB(checkpoint['state_dict']['_sh_coordinates_dc'][:, 0, :])
     else:
@@ -2507,6 +2531,7 @@ def load_rc_model(
         nerfmodel=nerfmodel,
         points=checkpoint['state_dict']['_points'],
         colors=colors,
+        objs=checkpoint['state_dict']['_sh_coordinates_obj'],
         initialize=initialize,
         sh_levels=sh_levels,
         learnable_positions=learnable_positions,
@@ -2806,6 +2831,7 @@ def convert_refined_sugar_into_gaussians(
     opacities=None,
     sh_coordinates_dc=None,
     sh_coordinates_rest=None,
+    sh_coordinates_obj=None,
     ):
     new_gaussians = GaussianModel(refined_sugar.sh_levels - 1)
     
@@ -2846,7 +2872,7 @@ def convert_refined_sugar_into_gaussians(
             features_extra = sh_coordinates_rest.cpu().numpy()
 
         # Semantic related
-        if sh_coordinates_rest is None:
+        if sh_coordinates_obj is None:
             features_obj = refined_sugar._sh_coordinates_obj.cpu().numpy()
         else:
             features_obj = sh_coordinates_obj.cpu().numpy()

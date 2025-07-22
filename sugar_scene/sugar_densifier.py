@@ -142,7 +142,7 @@ class SuGaRDensifier():
             }
         tensors_dict["sh_coordinates_dc"] = new_sh_coordinates_dc
         tensors_dict["sh_coordinates_rest"] = new_sh_coordinates_rest
-        tensors_dict["new_sh_coordinates_obj"] = new_sh_coordinates_obj # Add semantic
+        tensors_dict["sh_coordinates_obj"] = new_sh_coordinates_obj # Add semantic
 
         optimizable_tensors = self.cat_tensors_to_optimizer(tensors_dict)
         
