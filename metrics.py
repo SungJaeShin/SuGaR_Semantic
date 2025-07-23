@@ -31,7 +31,16 @@ if __name__ == "__main__":
                         help='(Required) Path to the JSON file containing the scenes to evaluate. '
                         'The JSON file should be a dictionary with the following structure: '
                         '{source_images_dir_path: vanilla_gaussian_splatting_checkpoint_path}')
-    
+
+    # Coarse Mesh path
+    parser.add_argument('--coarse_mesh_path', type=str, default=None,
+                        help='Path to coarse mesh (.ply) to use instead of auto-generated name.')
+
+    # Refine Mesh path
+    parser.add_argument('--refine_mesh_path', type=str, default=None,
+                        help='Path to coarse mesh (.ply) to use instead of auto-generated name.')
+
+
     # Coarse model parameters
     parser.add_argument('-i', '--iteration_to_load', type=int, default=7000, 
                         help='iteration to load.')
@@ -326,6 +335,9 @@ if __name__ == "__main__":
                                     )
                             mesh_save_dir = os.path.join('./output/coarse_mesh/', scene_name)
                             sugar_mesh_path = os.path.join(mesh_save_dir, sugar_mesh_path)
+                
+                            if args.coarse_mesh_path is not None:
+                                sugar_mesh_path = args.coarse_mesh_path
                             CONSOLE.print(f'Loading mesh to bind to: {sugar_mesh_path}')
                             o3d_mesh = o3d.io.read_triangle_mesh(sugar_mesh_path)
                             
@@ -339,6 +351,9 @@ if __name__ == "__main__":
                                 'YY', str(n_gaussians_per_surface_triangle).replace('.', '')
                                 )
                             refined_sugar_path = os.path.join(refined_sugar_path, f'{refinement_iterations}.pt')
+                            
+                            if args.refine_mesh_path is not None:
+                                refined_sugar_path = os.path.join(args.refine_mesh_path, f'{refinement_iterations}.pt')
                             CONSOLE.print(f"Loading SuGaR model config {refined_sugar_path}...")
                             checkpoint = torch.load(refined_sugar_path, map_location=nerfmodel_30k.device)
                             refined_sugar = SuGaR(
