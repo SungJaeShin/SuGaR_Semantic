@@ -1,7 +1,9 @@
+import os
 import torch.nn as nn
 from torch.nn.functional import normalize as torch_normalize
 import open3d as o3d
 from tqdm import tqdm
+from PIL import Image
 from pytorch3d.renderer import TexturesUV, TexturesVertex
 from pytorch3d.structures import Meshes
 from pytorch3d.transforms import quaternion_apply, quaternion_invert, matrix_to_quaternion, quaternion_to_matrix
