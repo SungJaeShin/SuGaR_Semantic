@@ -8,7 +8,7 @@ from gaussian_splatting.utils.loss_utils import ssim
 from gaussian_splatting.utils.image_utils import psnr
 from gaussian_splatting.lpipsPyTorch import lpips
 from sugar_scene.gs_model import GaussianSplattingWrapper
-from sugar_scene.sugar_model import SuGaR
+from sugar_scene.sugar_model import SuGaR, convert_refined_sugar_into_gaussians
 from sugar_utils.spherical_harmonics import SH2RGB
 from sugar_utils.general_utils import str2bool
 
@@ -350,18 +350,24 @@ if __name__ == "__main__":
                                 ).replace(
                                 'YY', str(n_gaussians_per_surface_triangle).replace('.', '')
                                 )
-                            refined_sugar_path = os.path.join(refined_sugar_path, f'{refinement_iterations}.pt')
-                            
+                            refined_sugar_path = os.path.join(refined_sugar_path, f'{refinement_iterations}.pt')                            
                             if args.refine_mesh_path is not None:
                                 refined_sugar_path = os.path.join(args.refine_mesh_path, f'{refinement_iterations}.pt')
                             CONSOLE.print(f"Loading SuGaR model config {refined_sugar_path}...")
-                            checkpoint = torch.load(refined_sugar_path, map_location=nerfmodel_30k.device)
+                            checkpoint = torch.load(refined_sugar_path, map_location=nerfmodel_30k.device)                            
+                            
+                            # Change sh_levels !!
+                            sh_levels = checkpoint['state_dict']['_sh_coordinates_rest'].shape[1]
+                            sh_levels = sh_levels // 3
+
                             refined_sugar = SuGaR(
                                 nerfmodel=nerfmodel_30k,
                                 points=checkpoint['state_dict']['_points'],
                                 colors=SH2RGB(checkpoint['state_dict']['_sh_coordinates_dc'][:, 0, :]),
+                                objs=checkpoint['state_dict']['_sh_coordinates_obj'][:, 0, :],
                                 initialize=False,
-                                sh_levels=nerfmodel_30k.gaussians.active_sh_degree+1,
+                                # sh_levels=nerfmodel_30k.gaussians.active_sh_degree+1,
+                                sh_levels=sh_levels-1,
                                 keep_track_of_knn=False,
                                 knn_to_track=0,
                                 beta_mode='average',
@@ -386,15 +392,18 @@ if __name__ == "__main__":
                                     p3d_cameras = nerfmodel_30k.test_cameras.p3d_cameras[cam_idx]
                                     sugar_img = renderer(textured_mesh, cameras=p3d_cameras)[0, ..., :3].clamp(min=0, max=1).permute(2, 0, 1).unsqueeze(0).contiguous()
                                 else:
-                                    sugar_img = refined_sugar.render_image_gaussian_rasterizer(
+                                    sugar_img, _ = refined_sugar.render_image_gaussian_rasterizer(
                                         nerf_cameras=nerfmodel_30k.test_cameras,
                                         camera_indices=cam_idx,
                                         verbose=False,
                                         bg_color=None,
                                         sh_deg=sh_deg_to_use,
-                                        compute_color_in_rasterizer=True,#compute_color_in_rasterizer,
-                                    ).clamp(min=0, max=1).permute(2, 0, 1).unsqueeze(0)
-                                
+                                        compute_color_in_rasterizer=True,
+                                        add_label=False,#compute_color_in_rasterizer,
+                                    )
+                                    # sugar_img = sugar_img.clamp(min=0, max=1).permute(2, 0, 1).unsqueeze(0)
+                                    sugar_img = sugar_img.clamp(min=0, max=1).unsqueeze(0)
+
                                 sugar_ssims.append(ssim(sugar_img, gt_img))
                                 sugar_psnrs.append(psnr(sugar_img, gt_img))
                                 sugar_lpipss.append(lpips(sugar_img, gt_img, net_type='vgg'))
@@ -411,6 +420,13 @@ if __name__ == "__main__":
                         CONSOLE.print("PSNR:", torch.tensor(sugar_psnrs).mean())
                         CONSOLE.print("LPIPS:", torch.tensor(sugar_lpipss).mean())
         
+
+        # # Export and save ply
+        # export_gs_ply_dir = '/workspace/rx_ws/results/gs_align/refined_ply/sugarfine_neudonatello-v3_tnt_test2_stage2-meetingroom-000230000_normalconsistency01_gaussperface1/gs_bind/'
+        # os.makedirs(export_gs_ply_dir, exist_ok=True)
+        # refined_gaussians = convert_refined_sugar_into_gaussians(refined_sugar)
+        # refined_gaussians.save_ply(os.path.join(export_gs_ply_dir, 'refine_gs.ply'))
+
         # Saves results to JSON file                
         results[scene_name] = scene_results
         estim_factor_str = str(coarse_estimation_factor).replace('.', '')
