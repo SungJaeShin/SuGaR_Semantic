@@ -926,6 +926,7 @@ def refined_training(args):
         sugar.save_semantic_render_imgs(path=semantic_img_path)
         # Classifier path
         classifier_model_path = os.path.join(sugar_checkpoint_path, 'classifier')
+        os.makedirs(classifier_model_path, exist_ok=True)
         torch.save(classifier.state_dict(), os.path.join(classifier_model_path, "classifier.pth"))
         CONSOLE.print("Semantic Render Image saved.")
 
